@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useState,useEffect} from "react";
 import {BrowserRouter as Router,Routes,Route,Navigate} from "react-router-dom";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -10,6 +10,23 @@ axios.defaults.withCredentials = true
 function App(){
 
   const[user,setuser]=useState(null);
+  const[authChecked,setAuthChecked]=useState(false);
+
+  useEffect(() =>{
+const authenticateUser = async()=>{
+  try{
+      const res=await axios.get("http://localhost:5001/api/auth/me");
+      setuser(res.data);
+  }catch(err){
+    console.log(err);
+  }finally{
+    setAuthChecked(true);
+  }
+}
+ authenticateUser();
+
+  },[]);
+   if (!authChecked) return <p>Loading...</p>;
 
   return(
     <Router>

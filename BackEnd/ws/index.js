@@ -24,6 +24,14 @@ function parseCookies(cookieHeader = "") {
 
 export function initwebsocket(server){
     const wss=new WebSocketServer({server,path:"/ws"});
+    function broadcast(payload) {
+  const data = JSON.stringify(payload);
+  for (const socket of clients.values()) {
+    if (socket.readyState === socket.OPEN) {
+      socket.send(data);
+    }
+  }
+}
 
     wss.on("connection",async (ws,req) =>{
         try{
@@ -42,6 +50,14 @@ export function initwebsocket(server){
         ws.userId=foundUser.id;
         clients.set(foundUser.id,ws)
         ws.send(JSON.stringify({type:"Connected",user:foundUser}));
+        // 1. tell the new user who is already online
+        ws.send(JSON.stringify({
+        type: "online_users",
+        userIds: [...clients.keys()],
+        }));
+
+        // 2. tell everyone that this user just came online
+        broadcast({ type: "presence", userId: foundUser.id, online: true });
 
         ws.on("message",async (raw)=>{
             let data;
@@ -87,6 +103,7 @@ export function initwebsocket(server){
         ws.on("close", () => {
   if (clients.get(foundUser.id) === ws) {
     clients.delete(foundUser.id);
+     broadcast({ type: "presence", userId: foundUser.id, online: false });
     console.log(`User ${foundUser.id} disconnected`);
   }
 });

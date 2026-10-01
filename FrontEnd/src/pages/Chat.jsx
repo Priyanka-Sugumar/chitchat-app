@@ -10,7 +10,13 @@ const [users,setusers]=useState([]);
 const [selectedUser,setselectedUser]=useState(null);
 const [messages,setMessages]=useState([]);
 const [draft, setDraft] = useState("");
+const [onlineUsers, setOnlineUsers] = useState(new Set());
 const wsRef = useRef(null);
+const bottomRef = useRef(null);
+const formatTime = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
 // selectedUserRef mirrors selectedUser state because ws.onmessage is defined
 // once inside a useEffect([]) — without a ref it would always "see" the
 // selectedUser value from the very first render (a stale closure), so
@@ -52,6 +58,11 @@ useEffect(() => {
 
 },[selectedUser]);
 
+// scroll automatically when new message comes
+useEffect(() => {
+  bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+}, [messages]);
+
 useEffect(() => {
   const ws = new WebSocket("ws://localhost:5001/ws");
   wsRef.current=ws
@@ -72,6 +83,21 @@ useEffect(() => {
       if (belongsToOpenConversation) {
         setMessages((prev) => [...prev, msg]);
       }
+    }
+    if (data.type === "online_users") {
+      setOnlineUsers(new Set(data.userIds));
+    }
+
+    if (data.type === "presence") {
+      setOnlineUsers((prev) => {
+        const next = new Set(prev);
+        if (data.online) {
+          next.add(data.userId);
+        } else {
+          next.delete(data.userId);
+        }
+        return next;
+      });
     }
   };
   ws.onclose = () => {
@@ -135,9 +161,12 @@ return (
           selectedUser?.id === u.id ? "bg-blue-50" : ""
         }`}
       >
-        <span className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 text-gray-600 font-semibold text-sm">
-          {u.name.charAt(0).toUpperCase()}
-        </span>
+        <span className="relative w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 text-gray-600 font-semibold text-sm">
+  {u.name.charAt(0).toUpperCase()}
+  {onlineUsers.has(u.id) && (
+    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full" />
+  )}
+</span>
         <p className="font-medium text-gray-800">{u.name}</p>
       </div>
     ))}
@@ -149,9 +178,12 @@ return (
       <section className="flex-1 flex flex-col">
         {selectedUser ? (
           <>
-            <div className="p-4 bg-white border-b font-semibold text-gray-800">
-              {selectedUser.name}
-            </div>
+            <div className="p-4 bg-white border-b">
+  <p className="font-semibold text-gray-800">{selectedUser.name}</p>
+  <p className={`text-xs ${onlineUsers.has(selectedUser.id) ? "text-green-600" : "text-gray-400"}`}>
+    {onlineUsers.has(selectedUser.id) ? "Online" : "Offline"}
+  </p>
+</div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {messages.map((m) => (
                 <div
@@ -162,15 +194,25 @@ return (
                       : "bg-white border text-gray-800"
                   }`}
                 >
-                  {m.content}
+                  <p>{m.content}</p>
+                  <p className="text-[10px] mt-1 text-right opacity-70">
+                  {formatTime(m.created_at)}
+                  </p>
                 </div>
               ))}
+              <div ref={bottomRef} />  
             </div>
             <div className="p-4 bg-white border-t flex gap-2">
               <input
                 type="text"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                  e.preventDefault();
+                  sendMessage();
+                    }
+                  }}
                 placeholder="Type a message..."
                 className="flex-1 border rounded-md px-3 py-2"
               />
